@@ -1,0 +1,3 @@
+#!/bin/bash
+[ "${SUDO_USER+set}" != "set" ] && exit 1
+exec "${0%-sudo}" "$SUDO_USER"
