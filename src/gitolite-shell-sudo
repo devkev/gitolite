@@ -8,5 +8,77 @@
 # Defaults!GITOLITE    env_keep += "SSH_CONNECTION SSH_ORIGINAL_COMMAND"
 # ALL     ALL = (git)  NOPASSWD: GITOLITE
 
-[ "${SUDO_USER+set}" != "set" ] && exit 1
-exec "${0%-sudo}" "$SUDO_USER"
+if [ "${SUDO_USER+set}" != "set" ]; then    
+	[ "${1+set}" != "set" ] && exit 1
+	args=""
+	if [ "${SSH_CONNECTION+set}" = set -a "${SSH_ORIGINAL_COMMAND+set}" = set ]; then
+		# check the original command for key self-service commands
+		# *carefully* - remembering that the original command is
+		# untrusted user input.
+		case "$SSH_ORIGINAL_COMMAND" in
+			"authkeys add "*)
+				untrusted_key_material="${SSH_ORIGINAL_COMMAND#authkeys add }"
+				# FIXME: Need to check it's kosher.
+
+				# FIXME: "readonly" keys would be good too, down the track.
+
+				# FIXME: Need to check it doesn't already exist.
+				if grep -sq ^"$untrusted_key_material"$ ~/.ssh/authorized_keys; then
+					# Already there
+					echo "Key already exists."
+					exit 0
+				else
+					mkdir -p ~/.ssh
+					echo "$untrusted_key_material" >> ~/.ssh/authorized_keys
+				fi
+
+				# tell gitolite to update its copy of the keys.
+				args="-u"
+				# and make sure that the gitolite hosting user can see
+				# our authorised keys file.
+				chmod o+x ~ ~/.ssh
+				chmod o+r ~/.ssh/authorized_keys
+				;;
+			"authkeys del "*)
+				echo "Key deletion not yet implemented."
+				exit $?   # this will need to go away when del is implemented
+				;;
+			"authkeys update")
+				# tell gitolite to update its copy of the keys.
+				args="-u"
+				# and make sure that the gitolite hosting user can see
+				# our authorised keys file.
+				chmod o+x ~ ~/.ssh
+				chmod o+r ~/.ssh/authorized_keys
+				;;
+			"authkeys list"|"authkeys list "*)
+				if [ -s ~/.ssh/authorized_keys ]; then
+					cat ~/.ssh/authorized_keys
+				else
+					echo "No authorised keys for $USER."
+				fi
+				exit $?
+				;;
+		esac
+		
+	fi
+	sudo -u "$1" "$0" $args
+else
+	if [ "$1" = "-u" ]; then
+		# Update the auto-keys for $SUDO_USER
+		if [ -e ~/.gitolite/keydir/auto/$SUDO_USER ]; then
+			mv ~/.gitolite/keydir/auto/$SUDO_USER{,.old}
+		fi
+		i=1
+		while read line; do
+			mkdir -p ~/.gitolite/keydir/auto/$SUDO_USER/$i
+			echo "$line" > ~/.gitolite/keydir/auto/$SUDO_USER/$i/$SUDO_USER.pub
+			i=$(($i+1))
+		done < $(eval echo ~$SUDO_USER)/.ssh/authorized_keys
+		rm -rf ~/.gitolite/keydir/auto/$SUDO_USER.old
+		"${0%-shell-sudo}" trigger SSH_AUTHKEYS
+		exit $?
+	fi
+	exec "${0%-sudo}" "$SUDO_USER"
+fi
+
