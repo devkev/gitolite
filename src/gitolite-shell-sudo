@@ -1,3 +1,12 @@
 #!/bin/bash
+
+# Add something like this to your sudoers:
+#
+# # This must come after the above SYSADMINS entry, otherwise users
+# # in the SYSADMINS alias won't be able to use gitolite properly.
+# Cmnd_Alias GITOLITE = /home/git/gitolite/src/gitolite-shell-sudo
+# Defaults!GITOLITE    env_keep += "SSH_CONNECTION SSH_ORIGINAL_COMMAND"
+# ALL     ALL = (git)  NOPASSWD: GITOLITE
+
 [ "${SUDO_USER+set}" != "set" ] && exit 1
 exec "${0%-sudo}" "$SUDO_USER"
