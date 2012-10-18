@@ -1,0 +1,36 @@
+#!/bin/bash
+
+# This script allows group membership in gitolite to be "primed" from
+# unix groups.  Add
+#
+#   GROUPLIST_PGM           =>  '/path/to/gitolite/src/unix-groups',
+#
+# to your rc file.
+#
+# Eg. Suppose your gitolite username is "myuser", and it has an unix
+# account on the host machine (ie. an /etc/passwd entry, or is in
+# ldap, or whatever).  If your unix user is in the groups "group1",
+# "group2" and "group3", then using this script and the above
+# configuration is equivalent to having in the conf file:
+#
+# @group1 = myuser
+# @group2 = myuser
+# @group3 = myuser
+#
+
+
+case "$1" in
+	"")
+		exit 1
+		;;
+	gitweb|daemon)
+		exit 0
+		;;
+esac
+
+groups=($(/usr/bin/groups "$1"))
+
+# FIXME: logging
+
+echo "${groups[*]:2}"
+
