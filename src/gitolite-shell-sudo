@@ -11,56 +11,87 @@
 if [ "${SUDO_USER+set}" != "set" ]; then    
 	[ "${1+set}" != "set" ] && exit 1
 	args=""
-	if [ "${SSH_CONNECTION+set}" = set -a "${SSH_ORIGINAL_COMMAND+set}" = set ]; then
-		# check the original command for key self-service commands
-		# *carefully* - remembering that the original command is
-		# untrusted user input.
-		case "$SSH_ORIGINAL_COMMAND" in
-			"authkeys add "*)
-				untrusted_key_material="${SSH_ORIGINAL_COMMAND#authkeys add }"
-				# FIXME: Need to check it's kosher.
+	if [ "${SSH_CONNECTION+set}" = set ]; then
+		if [ "${SSH_ORIGINAL_COMMAND+set}" = set ]; then
+			# check the original command for key self-service commands
+			# *carefully* - remembering that the original command is
+			# untrusted user input.
+			case "$SSH_ORIGINAL_COMMAND" in
+				"authkeys add "*)
+					untrusted_key_material="${SSH_ORIGINAL_COMMAND#authkeys add }"
+					# FIXME: Need to check it's kosher.
 
-				# FIXME: "readonly" keys would be good too, down the track.
+					# FIXME: "readonly" keys would be good too, down the track.
 
-				# FIXME: Need to check it doesn't already exist.
-				if grep -sq ^"$untrusted_key_material"$ ~/.ssh/authorized_keys; then
-					# Already there
-					echo "Key already exists."
-					exit 0
-				else
-					mkdir -p ~/.ssh
-					echo "$untrusted_key_material" >> ~/.ssh/authorized_keys
-				fi
+					# FIXME: Need to check it doesn't already exist.
+					if grep -sq ^"$untrusted_key_material"$ ~/.ssh/authorized_keys; then
+						# Already there
+						echo "Key already exists."
+						exit 0
+					else
+						mkdir -p ~/.ssh
+						echo "$untrusted_key_material" >> ~/.ssh/authorized_keys
+					fi
 
-				# tell gitolite to update its copy of the keys.
-				args="-u"
-				# and make sure that the gitolite hosting user can see
-				# our authorised keys file.
-				chmod o+x ~ ~/.ssh
-				chmod o+r ~/.ssh/authorized_keys
-				;;
-			"authkeys del "*)
-				echo "Key deletion not yet implemented."
-				exit $?   # this will need to go away when del is implemented
-				;;
-			"authkeys update")
-				# tell gitolite to update its copy of the keys.
-				args="-u"
-				# and make sure that the gitolite hosting user can see
-				# our authorised keys file.
-				chmod o+x ~ ~/.ssh
-				chmod o+r ~/.ssh/authorized_keys
-				;;
-			"authkeys list"|"authkeys list "*)
-				if [ -s ~/.ssh/authorized_keys ]; then
-					cat ~/.ssh/authorized_keys
-				else
-					echo "No authorised keys for $USER."
-				fi
-				exit $?
-				;;
-		esac
-		
+					# tell gitolite to update its copy of the keys.
+					args="-u"
+					# and make sure that the gitolite hosting user can see
+					# our authorised keys file.
+					chmod o+x ~ ~/.ssh
+					chmod o+r ~/.ssh/authorized_keys
+					;;
+				"authkeys del "*)
+					echo "Key deletion not yet implemented."
+					exit $?   # this will need to go away when del is implemented
+					;;
+				"authkeys update")
+					# tell gitolite to update its copy of the keys.
+					args="-u"
+					# and make sure that the gitolite hosting user can see
+					# our authorised keys file.
+					chmod o+x ~ ~/.ssh
+					chmod o+r ~/.ssh/authorized_keys
+					;;
+				"authkeys list"|"authkeys list "*)
+					if [ -s ~/.ssh/authorized_keys ]; then
+						cat ~/.ssh/authorized_keys
+					else
+						echo "No authorised keys for $USER."
+					fi
+					exit $?
+					;;
+				"rsync"|"rsync "*)
+					# Special case for admins...
+					case "$USER" in
+						# FIXME: sucks to be hardcoding this in here like this.  Sorry.
+						*900|root)
+							eval exec $SSH_ORIGINAL_COMMAND
+							;;
+					esac
+					;;
+			esac
+			
+		else
+			# If we get this far, but $SSH_ORIGINAL_COMMAND isn't set,
+			# then it's because the user has just done a plain "ssh host".
+			# If the user is permitted, this will get them a normal login
+			# shell.  Otherwise they get passed through to gitolite as per
+			# normal.  This allows admins of the server to get on as their
+			# normal user (from which they can sudo to root or the gitolite
+			# hosting user), while still allowing them to use gitolite from
+			# their normal user account just like other, non-admin users.
+			# It does preclude admins from being able to do things like
+			# "ssh -t host sudo service sshd restart", but they can get over
+			# that.  Actually the real problem here is that it breaks
+			# rsync, which is somewhat more significant.
+			# FIXME: Investigate using ssh subsystems as a way around this.
+			case "$USER" in
+				# FIXME: sucks to be hardcoding this in here like this.  Sorry.
+				*900|root)
+					exec $(getent passwd "$USER" | awk -F: '{print $7}') -l
+					;;
+			esac
+		fi
 	fi
 	sudo -u "$1" "$0" $args
 else
