@@ -191,6 +191,7 @@ sub new_wild_repo {
     trigger( 'PRE_CREATE', $repo, $user, $aa );
     new_repo($repo);
     _print( "$repo.git/gl-creator", $user );
+	$rc{DEFAULT_ROLE_PERMS} =~ s/CREATOR/$user/;
     _print( "$repo.git/gl-perms", ( $rc{DEFAULT_ROLE_PERMS} ? "$rc{DEFAULT_ROLE_PERMS}\n" : "" ) );
     trigger( 'POST_CREATE', $repo, $user, $aa );
 
