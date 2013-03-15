@@ -28,7 +28,7 @@ case "$1" in
 		;;
 esac
 
-groups=($(/usr/bin/groups "$1"))
+groups=($(/usr/bin/groups "$1" 2>/dev/null))
 
 # FIXME: logging
 
