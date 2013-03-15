@@ -30,7 +30,17 @@ esac
 
 groups=($(/usr/bin/groups "$1" 2>/dev/null))
 
+# Old versions of coreutils (like 8.4 in Centos 5/6) will always output
+# the "username : " prefix, even if only one username is specified.
+# Newer versions of coreutils (like 8.15) will only print this prefix if
+# more than one user is specified.
+# So we should deal with the presence or absence of this prefix.
+# At least we don't have to deal with more than one line.
+if [ "${groups[0]}" = "$1" -a "${groups[1]}" = ":" ]; then
+	groups="${groups[*]:2}"
+fi
+
 # FIXME: logging
 
-echo "${groups[*]:2}"
+echo "${groups[*]}"
 
