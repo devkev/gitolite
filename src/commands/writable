@@ -25,7 +25,7 @@ my $repo = shift;
 my $on = ( shift eq 'on' );
 
 if ( $repo eq '@all' ) {
-    _die "you are not authorized" if $ENV{GL_USER} and not is_admin();
+    _die "you are not authorized" if $ENV{GL_USER} and not (is_admin() or in_group("writable"));
 } else {
     _die "you are not authorized" if $ENV{GL_USER} and not owns($repo);
 }
