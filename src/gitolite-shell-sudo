@@ -19,18 +19,23 @@ if [ "${SUDO_USER+set}" != "set" ]; then
 			case "$SSH_ORIGINAL_COMMAND" in
 				"authkeys add "*)
 					untrusted_key_material="${SSH_ORIGINAL_COMMAND#authkeys add }"
-					# FIXME: Need to check it's kosher.
+					# Check it's kosher.
+					trusted_key_material="$(sed -ne '1 s,^\(ssh-[a-zA-Z0-9]\+\s\+[a-zA-Z0-9+/]\+=\?=\?\)\s.*$,\1,p' <<< "$untrusted_key_material")"
+					if [ ! "$trusted_key_material" ]; then
+						echo "Error: Invalid key format"
+						exit 1
+					fi
 
 					# FIXME: "readonly" keys would be good too, down the track.
 
 					# FIXME: Need to check it doesn't already exist.
-					if grep -sq ^"$untrusted_key_material"$ ~/.ssh/authorized_keys; then
+					if grep -sq ^"$trusted_key_material" ~/.ssh/authorized_keys; then
 						# Already there
 						echo "Key already exists."
 						exit 0
 					else
 						mkdir -p ~/.ssh
-						echo "$untrusted_key_material" >> ~/.ssh/authorized_keys
+						echo "$trusted_key_material" >> ~/.ssh/authorized_keys
 					fi
 
 					# tell gitolite to update its copy of the keys.
