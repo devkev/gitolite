@@ -24,13 +24,13 @@ if gitolite query-rc -q WRITER_CAN_UPDATE_DESC
 then
     gitolite access -q "$repo" $GL_USER W any || die You are not authorised
 else
-    gitolite creator "$repo" $GL_USER || die You are not authorised
+    gitolite owners "$repo" $GL_USER || die You are not authorised
 fi
 
 # if it passes, $repo is a valid repo name so it is known to contain only sane
-# characters.  This is because 'gitolite creator' return true only if there
-# *is* a repo of that name and it has a gl-creator file that contains the same
-# text as $GL_USER.
+# characters.  This is because 'gitolite owners' return true only if there
+# *is* a repo of that name and it has a gl-creator and/or gl-perms file that
+# authorises $GL_USER as an owner of the repo.
 
 descfile=`gitolite query-rc GL_REPO_BASE`/"$repo".git/description
 

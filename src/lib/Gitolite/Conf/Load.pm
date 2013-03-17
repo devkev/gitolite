@@ -45,6 +45,8 @@ my %listers = (
     'list-repos'       => \&list_repos,
     'list-memberships' => \&list_memberships,
     'list-members'     => \&list_members,
+    'list-roles'       => \&list_roles,
+    'list-repo-roles'  => \&list_repo_roles,
 );
 
 # helps maintain the "cache" in both "load_common" and "load_1"
@@ -576,6 +578,61 @@ sub list_members {
     }
 
     return ( sort_u( \@m ) );
+}
+
+=for list_roles
+Usage:  gitolite list-roles <user> <repo>
+
+  - list all roles that the user is a member of in the given repo
+=cut
+
+sub list_roles {
+    usage() if @_ and $_[0] eq '-h' or not @_;
+
+    my $user = shift;
+    my $repo = shift;
+
+    load_common();
+    my @m = memberships( '', $user );
+
+    my @roles = user_roles( $user, $repo, @m );
+    map s/^@//, @roles;
+
+    return ( sort_u( \@roles ) );
+}
+
+=for list_repo_roles
+Usage:  gitolite list-repo-roles <repo>
+
+  - list all roles defined for a repo
+=cut
+
+sub list_repo_roles {
+    usage() if @_ and $_[0] eq '-h' or not @_;
+
+    my $repo = shift;
+
+    # prevent unnecessary disclosure of repo existence info
+    return [] if repo_missing($repo);
+
+    my $pf = "$rc{GL_REPO_BASE}/$repo.git/gl-perms";
+    return [] if ! -f $pf;
+
+    open my $PF, $pf or _die "Cannot read perms";
+    chomp(my @perms = <$PF>);
+    close $PF;
+
+    map s/^\s+//, @perms;
+    map s/ +$//, @perms;
+    map s/=/ /, @perms;
+    map s/\s+/ /g, @perms;
+    map s/^\@//, @perms;
+    @perms = grep ! /^#/, @perms;
+    @perms = grep ! /^$/, @perms;
+
+    map s/\s.*$//, @perms;
+
+    return ( sort_u( \@perms ) );
 }
 
 # ----------------------------------------------------------------------
