@@ -168,7 +168,7 @@ sub owns {
     # prevent unnecessary disclosure of repo existence info
     return 0 if repo_missing($r);
 
-    if (exists($rc{OWNER_ROLE}) and scalar grep { $_ eq $rc{OWNER_ROLE} } @{ Gitolite::Conf::Load::list_repo_roles($r) } > 0) {
+    if (exists($rc{OWNER_ROLE}) and scalar(grep { $_ eq $rc{OWNER_ROLE} } @{ Gitolite::Conf::Load::list_repo_roles($r) }) > 0) {
         return in_role($r, $rc{OWNER_ROLE});
     } else {
         return ( creator($r) eq $user );
