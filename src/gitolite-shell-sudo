@@ -28,7 +28,7 @@ if [ "${SUDO_USER+set}" != "set" ]; then
 
 					# FIXME: "readonly" keys would be good too, down the track.
 
-					# FIXME: Need to check it doesn't already exist.
+					# Check it doesn't already exist.
 					if grep -sq ^"$trusted_key_material" ~/.ssh/authorized_keys; then
 						# Already there
 						echo "Key already exists."
