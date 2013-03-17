@@ -35,7 +35,9 @@ package Gitolite::Easy;
   is_admin
   is_super_admin
   in_group
+  in_role
 
+  owners
   owns
   can_read
   can_write
@@ -104,12 +106,61 @@ sub in_group {
     return grep { $_ eq $g } @{ Gitolite::Conf::Load::list_memberships($user) };
 }
 
-# owns()
+# in_role()
 
-# return true if $ENV{GL_USER} is set and is the creator of the given repo
+# return true if $ENV{GL_USER} is set and is in the given role for the repo
 
 # shell equivalent
-#   if gitolite creator $REPONAME $GL_USER; then ...
+#   if gitolite list-roles $GL_USER $REPO | grep -x $ROLENAME >/dev/null; then ...
+sub in_role {
+    valid_user();
+    my $repo = shift;
+    my $role = shift;
+
+    return grep { $_ eq $role } @{ Gitolite::Conf::Load::list_roles($user, $repo) };
+}
+
+# owners()
+
+# return the array of owners of the given repo
+
+# shell equivalent
+#   if gitolite owners $REPONAME; then ...
+sub owners {
+    valid_user();
+    my $r = shift;
+
+    # prevent unnecessary disclosure of repo existence info
+    return () if repo_missing($r);
+
+    my $pf = "$rc{GL_REPO_BASE}/$r.git/gl-perms";
+    my @owners;
+    if (exists($rc{OWNER_ROLE}) and -f $pf) {
+        open my $PF, $pf or _die "Cannot read perms";
+        chomp(my @perms = <$PF>);
+        close $PF;
+
+        map s/^\s+//, @perms;
+        map s/ +$//, @perms;
+        map s/=/ /, @perms;
+        map s/\s+/ /g, @perms;
+        map s/^\@//, @perms;
+        @perms = grep ! /^#/, @perms;
+        @perms = grep ! /^$/, @perms;
+
+        @owners = grep s/^$rc{OWNER_ROLE}\s//, @perms;
+    }
+    push @owners, creator($r) if scalar @owners == 0;
+    my %owners = map { $_ => 1 } @owners;
+    return keys %owners;
+}
+
+# owns()
+
+# return true if $ENV{GL_USER} is set and is an owner of the given repo
+
+# shell equivalent
+#   if gitolite owners $REPONAME $GL_USER; then ...
 sub owns {
     valid_user();
     my $r = shift;
@@ -117,7 +168,11 @@ sub owns {
     # prevent unnecessary disclosure of repo existence info
     return 0 if repo_missing($r);
 
-    return ( creator($r) eq $user );
+    if (exists($rc{OWNER_ROLE}) and scalar grep { $_ eq $rc{OWNER_ROLE} } @{ Gitolite::Conf::Load::list_repo_roles($r) } > 0) {
+        return in_role($r, $rc{OWNER_ROLE});
+    } else {
+        return ( creator($r) eq $user );
+    }
 }
 
 # can_read()

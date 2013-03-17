@@ -461,6 +461,13 @@ __DATA__
     # uncomment (and change) this if you wish
     # DEFAULT_ROLE_PERMS            =>  'READERS @all',
 
+    # If defined, this is the name of a role that will be used instead of
+    # the CREATOR to define what is meant by the "owner" of a repository.
+    # Owners can change the perms, desc, and writable status of repos, and
+    # delete repos with D.
+    # This role must also be defined in ROLES above!
+    # OWNER_ROLE                    =>  'OWNERS',
+
     # ------------------------------------------------------------------
 
     # rc variables used by various features

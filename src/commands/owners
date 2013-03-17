@@ -1,0 +1,36 @@
+#!/usr/bin/perl
+use strict;
+use warnings;
+
+use lib $ENV{GL_LIBDIR};
+use Gitolite::Easy;
+
+=for usage
+Usage:  gitolite owners <reponame> [<username>]
+
+Print the owner name(s) for the repo.
+
+When an optional username is supplied, it checks if the user is an owner of
+the repo and returns an exit code (shell truth, 0 for success) instead of
+printing anything, which makes it possible to do this in shell:
+
+    if gitolite owners someRepo someUser
+    then
+        ...
+=cut
+
+usage() if not @ARGV or $ARGV[0] eq '-h';
+my $repo = shift;
+my $user = shift || '';
+
+if ($user) {
+    # Since this command isn't sensitive (ie. anyone can run it),
+    # we can get away with (ab)using $GL_USER.
+    # But this is no substitute for a better-designed interface.
+    $ENV{GL_USER} = $user;
+    exit not owns($repo);
+} else {
+    my @owners = owners($repo);
+    my %owners = map { $_ => 1 } @owners;
+    {local $,="\n"; local $\="\n"; print keys %owners;}
+}
