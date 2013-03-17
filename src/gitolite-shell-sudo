@@ -8,6 +8,16 @@
 # Defaults!GITOLITE    env_keep += "SSH_CONNECTION SSH_ORIGINAL_COMMAND"
 # ALL     ALL = (git)  NOPASSWD: GITOLITE
 
+function is_admin {
+	case "$1" in
+		# FIXME: sucks to be hardcoding this in here like this.  Sorry.
+		*900|root)
+			return 0
+			;;
+	esac
+	return 1
+}
+
 if [ "${SUDO_USER+set}" != "set" ]; then    
 	[ "${1+set}" != "set" ] && exit 1
 	args=""
@@ -67,12 +77,9 @@ if [ "${SUDO_USER+set}" != "set" ]; then
 					;;
 				"rsync"|"rsync "*)
 					# Special case for admins...
-					case "$USER" in
-						# FIXME: sucks to be hardcoding this in here like this.  Sorry.
-						*900|root)
-							eval exec $SSH_ORIGINAL_COMMAND
-							;;
-					esac
+					if is_admin "$USER"; then
+						eval exec $SSH_ORIGINAL_COMMAND
+					fi
 					;;
 			esac
 			
@@ -90,12 +97,9 @@ if [ "${SUDO_USER+set}" != "set" ]; then
 			# that.  Actually the real problem here is that it breaks
 			# rsync, which is somewhat more significant.
 			# FIXME: Investigate using ssh subsystems as a way around this.
-			case "$USER" in
-				# FIXME: sucks to be hardcoding this in here like this.  Sorry.
-				*900|root)
-					exec $(getent passwd "$USER" | awk -F: '{print $7}') -l
-					;;
-			esac
+			if is_admin "$USER"; then
+				exec $(getent passwd "$USER" | awk -F: '{print $7}') -l
+			fi
 		fi
 	fi
 	sudo -u "$1" "$0" $args
