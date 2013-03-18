@@ -18,17 +18,23 @@
 # @group3 = myuser
 #
 
+user="$1"
 
-case "$1" in
+ro=
+case "$user" in
 	"")
 		exit 1
 		;;
 	gitweb|daemon)
 		exit 0
 		;;
+	*_ro)
+		ro=y
+		user="${user%_ro}"
+		;;
 esac
 
-groups=($(/usr/bin/groups "$1" 2>/dev/null))
+groups=($(/usr/bin/groups "$user" 2>/dev/null))
 
 # Old versions of coreutils (like 8.4 in Centos 5/6) will always output
 # the "username : " prefix, even if only one username is specified.
@@ -36,8 +42,12 @@ groups=($(/usr/bin/groups "$1" 2>/dev/null))
 # more than one user is specified.
 # So we should deal with the presence or absence of this prefix.
 # At least we don't have to deal with more than one line.
-if [ "${groups[0]}" = "$1" -a "${groups[1]}" = ":" ]; then
-	groups="${groups[*]:2}"
+if [ "${groups[0]}" = "$user" -a "${groups[1]}" = ":" ]; then
+	groups=("${groups[@]:2}")
+fi
+
+if [ "$ro" = y ]; then
+	groups=("${groups[@]/%/_ro}")
 fi
 
 # FIXME: logging

@@ -29,6 +29,21 @@ if [ "${SUDO_USER+set}" != "set" ]; then
 			case "$SSH_ORIGINAL_COMMAND" in
 				"authkeys add "*)
 					untrusted_key_material="${SSH_ORIGINAL_COMMAND#authkeys add }"
+
+					ro=
+					case "$untrusted_key_material" in
+						"-r "*|"-ro "*|"--ro "*|"--readonly "*|"--read-only "*)
+							ro=y
+							untrusted_key_material="${untrusted_key_material#* }"
+							case "$untrusted_key_material" in
+								"-p "*|"-project "*|"--project "*|"-g "*|"--group "*)
+								untrusted_key_material="${untrusted_key_material#* }"
+								untrusted_project="${untrusted_key_material%% *}"
+								untrusted_key_material="${untrusted_key_material#* }"
+							esac
+							;;
+					esac
+
 					# Check it's kosher.
 					trusted_key_material="$(sed -ne '1 s,^\(ssh-[a-zA-Z0-9]\+\s\+[a-zA-Z0-9+/]\+=\?=\?\)\s.*$,\1,p' <<< "$untrusted_key_material")"
 					if [ ! "$trusted_key_material" ]; then
@@ -36,27 +51,85 @@ if [ "${SUDO_USER+set}" != "set" ]; then
 						exit 1
 					fi
 
-					# FIXME: "readonly" keys would be good too, down the track.
+					suffix=""
+					suffix_other="_ro"
+					if [ "$ro" ]; then
+						suffix="_ro"
+						suffix_other=""
+
+						trusted_project="$(sed -ne '1 s,^\([a-zA-Z0-9._-]\+\).*$,\1,p' <<< "$untrusted_project")"
+
+						# Check that the user is actually in this group, otherwise they are trying to snoop.
+						groups=($("${0%/*}"/unix-groups "$USER"))
+						case "${groups[*]}" in
+							*" $trusted_project "*|*" $trusted_project"|"$trusted_project "*|"$trusted_project")
+								# Fine.
+								;;
+							*)
+								# Not fine.
+								echo "Error: you are not a member of $trusted_project"
+								exit 1
+								;;
+						esac
+
+					fi
 
 					# Check it doesn't already exist.
-					if grep -sq ^"$trusted_key_material" ~/.ssh/authorized_keys; then
+					if grep -sq ^"$trusted_key_material" ~/.ssh/authorized_keys$suffix; then
 						# Already there
-						echo "Key already exists."
-						exit 0
-					else
-						mkdir -p ~/.ssh
-						echo "$trusted_key_material" >> ~/.ssh/authorized_keys
+						if [ "$trusted_project" ]; then
+							# Are we trying to convert/change the project of a r/o key?
+							if grep -sq ^"$trusted_key_material $trusted_project"$ ~/.ssh/authorized_keys$suffix; then
+								# Key is already there with this project.
+								echo "Key already exists."
+								exit 0
+							else
+								echo "Converting read-only key's previous project to be $trusted_project"
+								# Here, just remove it, and it will be added below.
+								sed -i -e '\,^'"$trusted_key_material"',d' ~/.ssh/authorized_keys$suffix
+							fi
+						else
+							echo "Key already exists."
+							exit 0
+						fi
 					fi
+
+					if grep -sq ^"$trusted_key_material" ~/.ssh/authorized_keys$suffix_other; then
+						# It's already there, but in the OTHER file.  ie. user (apparently) wants
+						# to convert a r/o key to r/w (unsafe, not allowed, delete first then re-add),
+						# or convert a r/w key to r/o (fine, though emit warning).
+						if [ "$suffix" = _ro ]; then
+							echo "Converting previously read-write key to be read-only..."
+							# Here, just remove it from ~/.ssh/authorized_keys$suffix_other,
+							# it will be added to ~/.ssh/authorized_keys$suffix below.
+							sed -i -e '\,^'"$trusted_key_material"',d' ~/.ssh/authorized_keys$suffix_other
+						else
+							echo "Converting a read-only key to be read-write is dangerous."
+							echo "Is this really what you intended?"
+							echo "If so, you must first delete the read-only key, and then"
+							echo "separately add it again as read-write."
+							exit 1
+						fi
+					fi
+
+					if [ "$trusted_project" ]; then
+						trusted_key_material="$trusted_key_material $trusted_project"
+					fi
+
+					# Key is nowhere to be seen (or was read-write, but has been dealt with above).
+					mkdir -p ~/.ssh
+					echo "$trusted_key_material" >> ~/.ssh/authorized_keys$suffix
 
 					# tell gitolite to update its copy of the keys.
 					args="-u"
 					# and make sure that the gitolite hosting user can see
 					# our authorised keys file.
 					chmod o+x ~ ~/.ssh
-					chmod o+r ~/.ssh/authorized_keys
+					chmod o+r ~/.ssh/authorized_keys ~/.ssh/authorized_keys_ro
 					;;
 				"authkeys del "*)
 					echo "Key deletion not yet implemented."
+					# FIXME: remember to do ro keys
 					exit $?   # this will need to go away when del is implemented
 					;;
 				"authkeys update")
@@ -65,13 +138,21 @@ if [ "${SUDO_USER+set}" != "set" ]; then
 					# and make sure that the gitolite hosting user can see
 					# our authorised keys file.
 					chmod o+x ~ ~/.ssh
-					chmod o+r ~/.ssh/authorized_keys
+					chmod o+r ~/.ssh/authorized_keys ~/.ssh/authorized_keys_ro
 					;;
 				"authkeys list"|"authkeys list "*)
 					if [ -s ~/.ssh/authorized_keys ]; then
+						echo "Authorised public keys for $USER:"
 						cat ~/.ssh/authorized_keys
 					else
-						echo "No authorised keys for $USER."
+						echo "No authorised public keys for $USER."
+					fi
+					echo ""
+					if [ -s ~/.ssh/authorized_keys_ro ]; then
+						echo "Authorised READ-ONLY public keys for $USER:"
+						cat ~/.ssh/authorized_keys_ro
+					else
+						echo "No authorised read-only public keys for $USER."
 					fi
 					exit $?
 					;;
@@ -111,10 +192,20 @@ else
 		fi
 		i=1
 		while read line; do
-			mkdir -p ~/.gitolite/keydir/auto/$SUDO_USER/$i
-			echo "$line" > ~/.gitolite/keydir/auto/$SUDO_USER/$i/$SUDO_USER.pub
+			outfile=~/.gitolite/keydir/auto/$SUDO_USER/$i/${SUDO_USER}.pub
+			mkdir -p "${outfile%/*}"
+			echo "$line" > "$outfile"
 			i=$(($i+1))
 		done < $(eval echo ~$SUDO_USER)/.ssh/authorized_keys
+		while read type key project; do
+			outfile=~/.gitolite/keydir/auto/$SUDO_USER/$i/${SUDO_USER}_ro.pub
+			if [ "$project" ]; then
+				outfile=~/.gitolite/keydir/auto/$SUDO_USER/$i/$project.pub
+			fi
+			mkdir -p "${outfile%/*}"
+			echo "$type $key $project" > "$outfile"
+			i=$(($i+1))
+		done < $(eval echo ~$SUDO_USER)/.ssh/authorized_keys_ro
 		rm -rf ~/.gitolite/keydir/auto/$SUDO_USER.old
 		"${0%-shell-sudo}" trigger SSH_AUTHKEYS
 		exit $?
