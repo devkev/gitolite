@@ -186,6 +186,7 @@ if [ "${SUDO_USER+set}" != "set" ]; then
 	sudo -u "$1" "$0" $args
 else
 	if [ "$1" = "-u" ]; then
+		# FIXME: build the new tree in .new, then quickly flip the directories.
 		# Update the auto-keys for $SUDO_USER
 		if [ -e ~/.gitolite/keydir/auto/$SUDO_USER ]; then
 			mv ~/.gitolite/keydir/auto/$SUDO_USER{,.old}
