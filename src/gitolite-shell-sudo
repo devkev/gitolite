@@ -67,8 +67,15 @@ if [ "${SUDO_USER+set}" != "set" ]; then
 								;;
 							*)
 								# Not fine.
-								echo "Error: you are not a member of $trusted_project"
-								exit 1
+								# Unless they are in @admins.
+								if sudo -u "$1" "$0" list-memberships "$USER" | grep -sq '^@admins$'; then
+									# Fine
+									:
+								else
+									# Not fine.
+									echo "Error: you are not a member of $trusted_project"
+									exit 1
+								fi
 								;;
 						esac
 
@@ -210,6 +217,8 @@ else
 		rm -rf ~/.gitolite/keydir/auto/$SUDO_USER.old
 		"${0%-shell-sudo}" trigger SSH_AUTHKEYS
 		exit $?
+	elif [ "$1" = list-memberships -a "$2" = "$SUDO_USER" ]; then
+		exec "${0%-shell-sudo}" "$@"
 	fi
 	exec "${0%-sudo}" "$SUDO_USER"
 fi
